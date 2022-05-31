@@ -96,11 +96,12 @@ https://github.com/JupiterOne/sdk/blob/main/docs/integrations/development.md
 
 The following entities are created:
 
-| Resources | Entity `_type` | Entity `_class` |
-| --------- | -------------- | --------------- |
-| Account   | `acme_account` | `Account`       |
-| User      | `acme_user`    | `User`          |
-| UserGroup | `acme_group`   | `UserGroup`     |
+| Resources  | Entity `_type`       | Entity `_class` |
+| ---------- | -------------------- | --------------- |
+| Account    | `jenkins_account`    | `Account`       |
+| Repository | `jenkins_repository` | `Repository`    |
+| Role       | `jenkins_role`       | `AccessRole`    |
+| User       | `jenkins_user`       | `User`          |
 
 ### Relationships
 
@@ -108,9 +109,10 @@ The following relationships are created:
 
 | Source Entity `_type` | Relationship `_class` | Target Entity `_type` |
 | --------------------- | --------------------- | --------------------- |
-| `acme_account`        | **HAS**               | `acme_group`          |
-| `acme_account`        | **HAS**               | `acme_user`           |
-| `acme_group`          | **HAS**               | `acme_user`           |
+| `jenkins_account`     | **HAS**               | `jenkins_repository`  |
+| `jenkins_account`     | **HAS**               | `jenkins_role`        |
+| `jenkins_account`     | **HAS**               | `jenkins_user`        |
+| `jenkins_user`        | **HAS**               | `jenkins_role`        |
 
 <!--
 ********************************************************************************

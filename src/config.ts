@@ -21,12 +21,15 @@ import { createAPIClient } from './client';
  * `instance.config` in a UI.
  */
 export const instanceConfigFields: IntegrationInstanceConfigFieldMap = {
-  clientId: {
+  userName: {
     type: 'string',
   },
-  clientSecret: {
+  apiKey: {
     type: 'string',
     mask: true,
+  },
+  hostName: {
+    type: 'string',
   },
 };
 
@@ -38,12 +41,17 @@ export interface IntegrationConfig extends IntegrationInstanceConfig {
   /**
    * The provider API client ID used to authenticate requests.
    */
-  clientId: string;
+  userName: string;
 
   /**
    * The provider API client secret used to authenticate requests.
    */
-  clientSecret: string;
+  apiKey: string;
+
+  /**
+   * The Jenkins server url
+   */
+  hostName: string;
 }
 
 export async function validateInvocation(
@@ -51,9 +59,9 @@ export async function validateInvocation(
 ) {
   const { config } = context.instance;
 
-  if (!config.clientId || !config.clientSecret) {
+  if (!config.userName || !config.apiKey || !config.hostName) {
     throw new IntegrationValidationError(
-      'Config requires all of {clientId, clientSecret}',
+      'Config requires all of {userName, apiKey, hostName}',
     );
   }
 

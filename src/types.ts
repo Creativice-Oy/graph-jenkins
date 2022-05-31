@@ -1,25 +1,56 @@
-// Providers often supply types with their API libraries.
+// Providers often supply types with their API libraries
 
-export interface AcmeUser {
+export type JenkinsUser = {
+  lastChange: string | null;
+  project: string | null;
+  user: {
+    absoluteUrl: string;
+    fullName: string;
+  };
+
   id: string;
+};
+
+export type JenkinsRepository = {
+  _class: string;
   name: string;
-}
+  url: string;
+  color: string;
+};
 
-export interface AcmeGroup {
-  id: string;
+export type JenkinsRole = {
   name: string;
-  users?: Pick<AcmeUser, 'id'>[];
-}
+  roleType: string;
 
-// Those can be useful to a degree, but often they're just full of optional
-// values. Understanding the response data may be more reliably accomplished by
-// reviewing the API response recordings produced by testing the wrapper client
-// (./client.ts). However, when there are no types provided, it is necessary to define
-// opaque types for each resource, to communicate the records that are expected
-// to come from an endpoint and are provided to iterating functions.
-
-/*
-import { Opaque } from 'type-fest';
-export type AcmeUser = Opaque<any, 'AcmeUser'>;
-export type AcmeGroup = Opaque<any, 'AcmeGroup'>;
-*/
+  modelViewDelete: string;
+  modelComputerConnect: string;
+  modelRunDelete: string;
+  CredentialsProviderManageDomains: string;
+  modelComputerCreate: string;
+  modelViewConfigure: string;
+  modelComputerBuild: string;
+  modelItemConfigure: string;
+  modelHudsonAdminister: string;
+  modelItemCancel: string;
+  modelItemRead: string;
+  CredentialsProviderView: string;
+  modelComputerDelete: string;
+  modelItemBuild: string;
+  SCMTag: string;
+  modelItemMove: string;
+  modelItemDiscover: string;
+  modelHudsonRead: string;
+  CredentialsProviderUpdate: string;
+  modelItemCreate: string;
+  modelItemWorkspace: string;
+  CredentialsProviderDelete: string;
+  modelComputerProvision: string;
+  modelRunReplay: string;
+  modelViewRead: string;
+  modelViewCreate: string;
+  modelItemDelete: string;
+  modelComputerConfigure: string;
+  CredentialsProviderCreate: string;
+  modelComputerDisconnect: string;
+  modelRunUpdate: string;
+};

@@ -1,9 +1,12 @@
-import http from 'http';
-
-import { IntegrationProviderAuthenticationError } from '@jupiterone/integration-sdk-core';
+import fetch, { Response } from 'node-fetch';
+import {
+  IntegrationProviderAPIError,
+  IntegrationProviderAuthenticationError,
+} from '@jupiterone/integration-sdk-core';
+import { retry } from '@lifeomic/attempt';
 
 import { IntegrationConfig } from './config';
-import { AcmeUser, AcmeGroup } from './types';
+import { JenkinsUser, JenkinsRepository, JenkinsRole } from './types';
 
 export type ResourceIteratee<T> = (each: T) => Promise<void> | void;
 
@@ -18,104 +21,176 @@ export type ResourceIteratee<T> = (each: T) => Promise<void> | void;
 export class APIClient {
   constructor(readonly config: IntegrationConfig) {}
 
-  public async verifyAuthentication(): Promise<void> {
-    // TODO make the most light-weight request possible to validate
-    // authentication works with the provided credentials, throw an err if
-    // authentication fails
-    const request = new Promise<void>((resolve, reject) => {
-      http.get(
-        {
-          hostname: 'localhost',
-          port: 443,
-          path: '/api/v1/some/endpoint?limit=1',
-          agent: false,
-          timeout: 10,
+  private baseUri = this.config.hostName;
+  private withBaseUri = (path: string) => `${this.baseUri}${path}`;
+  private roleTypes = ['globalRoles', 'projectRoles', 'slaveRoles'];
+  private checkStatus = (response: Response) => {
+    if (response.ok) {
+      return response;
+    } else {
+      throw new IntegrationProviderAPIError(response);
+    }
+  };
+
+  private async getRequest(endpoint: string, method: 'GET'): Promise<Response> {
+    const auth =
+      'Basic ' +
+      Buffer.from(
+        `${this.config.userName}` + ':' + `${this.config.apiKey}`,
+      ).toString('base64');
+    try {
+      const options = {
+        method,
+        headers: {
+          //Authorization: `Basic Y3JlYXRpdmljZWFkbWluOjExZjJkN2JmMTM1Njg1MzNjODYyMWNiYzE3ZDhhYjE3ZjU=`,
+          Authorization: auth,
         },
-        (res) => {
-          if (res.statusCode !== 200) {
-            reject(new Error('Provider authentication failed'));
-          } else {
-            resolve();
-          }
+      };
+
+      const response = await retry(
+        async () => {
+          const res: Response = await fetch(endpoint, options);
+          this.checkStatus(res);
+          return res;
+        },
+        {
+          delay: 5000,
+          factor: 2,
+          maxAttempts: 5,
+          minDelay: 100,
+          maxDelay: 500,
+          jitter: true,
+          handleError: (err, context) => {
+            if (
+              err.statusCode !== 429 ||
+              ([500, 502, 503].includes(err.statusCode) &&
+                context.attemptNum > 1)
+            ) {
+              context.abort();
+            }
+          },
         },
       );
-    });
 
-    try {
-      await request;
+      return response.json();
     } catch (err) {
-      throw new IntegrationProviderAuthenticationError({
-        cause: err,
-        endpoint: 'https://localhost/api/v1/some/endpoint?limit=1',
+      throw new IntegrationProviderAPIError({
+        endpoint: endpoint,
         status: err.status,
         statusText: err.statusText,
       });
     }
   }
 
-  /**
-   * Iterates each user resource in the provider.
-   *
-   * @param iteratee receives each resource to produce entities/relationships
-   */
-  public async iterateUsers(
-    iteratee: ResourceIteratee<AcmeUser>,
+  private async paginatedUserRequest<T>(
+    uri: string,
+    method: 'GET',
+    iteratee: ResourceIteratee<T>,
   ): Promise<void> {
-    // TODO paginate an endpoint, invoke the iteratee with each record in the
-    // page
-    //
-    // The provider API will hopefully support pagination. Functions like this
-    // should maintain pagination state, and for each page, for each record in
-    // the page, invoke the `ResourceIteratee`. This will encourage a pattern
-    // where each resource is processed and dropped from memory.
+    let next = [];
 
-    const users: AcmeUser[] = [
-      {
-        id: 'acme-user-1',
-        name: 'User One',
-      },
-      {
-        id: 'acme-user-2',
-        name: 'User Two',
-      },
-    ];
+    do {
+      const response = await this.getRequest(uri, method);
+      for (const item of response.users) {
+        await iteratee(item);
+      }
+      next = response;
+    } while (next.length);
+  }
 
-    for (const user of users) {
-      await iteratee(user);
+  private async paginatedRepositoryRequest<T>(
+    uri: string,
+    method: 'GET',
+    iteratee: ResourceIteratee<T>,
+  ): Promise<void> {
+    let next = [];
+
+    do {
+      const response = await this.getRequest(uri, method);
+      for (const item of response.jobs) {
+        await iteratee(item);
+      }
+      next = response;
+      break;
+    } while (next.length);
+  }
+
+  public async verifyAuthentication(): Promise<void> {
+    const uri = this.withBaseUri(`/api/json`);
+    try {
+      await this.getRequest(uri, 'GET');
+    } catch (err) {
+      throw new IntegrationProviderAuthenticationError({
+        cause: err,
+        endpoint: uri,
+        status: err.status,
+        statusText: err.statusText,
+      });
     }
   }
 
-  /**
-   * Iterates each group resource in the provider.
-   *
-   * @param iteratee receives each resource to produce entities/relationships
-   */
-  public async iterateGroups(
-    iteratee: ResourceIteratee<AcmeGroup>,
+  public async iterateUsers(
+    iteratee: ResourceIteratee<JenkinsUser>,
   ): Promise<void> {
-    // TODO paginate an endpoint, invoke the iteratee with each record in the
-    // page
-    //
-    // The provider API will hopefully support pagination. Functions like this
-    // should maintain pagination state, and for each page, for each record in
-    // the page, invoke the `ResourceIteratee`. This will encourage a pattern
-    // where each resource is processed and dropped from memory.
+    await this.paginatedUserRequest<JenkinsUser>(
+      this.withBaseUri(`/asynchPeople/api/json`),
+      'GET',
+      iteratee,
+    );
+  }
 
-    const groups: AcmeGroup[] = [
-      {
-        id: 'acme-group-1',
-        name: 'Group One',
-        users: [
-          {
-            id: 'acme-user-1',
-          },
-        ],
-      },
-    ];
+  public async iterateRepos(
+    iteratee: ResourceIteratee<JenkinsRepository>,
+  ): Promise<void> {
+    await this.paginatedRepositoryRequest<JenkinsRepository>(
+      this.withBaseUri(`/api/json`),
+      'GET',
+      iteratee,
+    );
+  }
 
-    for (const group of groups) {
-      await iteratee(group);
+  public async listAllRoles(): Promise<any> {
+    const roleList: Array<string> = [];
+
+    for (const roleType of this.roleTypes) {
+      const roles = await this.getRequest(
+        this.withBaseUri(
+          `/role-strategy/strategy/getAllRoles?type=${roleType}`,
+        ),
+        'GET',
+      );
+      for (const role in roles) {
+        roleList.push(`${roleType}:${role}`);
+      }
     }
+
+    return roleList;
+  }
+
+  public async getRoleMembers(role: JenkinsRole): Promise<any> {
+    const request = await this.getRequest(
+      this.withBaseUri(
+        `/role-strategy/strategy/getRole?type=${role.roleType}&roleName=${role.name}`,
+      ),
+      'GET',
+    );
+    return request.sids;
+  }
+
+  public async getRoleDetails(role: string): Promise<JenkinsRole> {
+    const colonIndex = role.lastIndexOf(':');
+    const roleName = role.substring(colonIndex + 1);
+    const roleType = role.substring(0, colonIndex);
+
+    const request = await this.getRequest(
+      this.withBaseUri(
+        `/role-strategy/strategy/getRole?type=${roleType}&roleName=${roleName}`,
+      ),
+      'GET',
+    );
+    request.name = roleName;
+    request.roleType = `${roleType}`;
+    return request;
   }
 }
 
